@@ -1,4 +1,3 @@
-import { Router } from './router.js';
 import { AuthService } from './services/auth.js';
 import { ApiService } from './services/api.js';
 import { HomePage } from './pages/home.js';
@@ -15,17 +14,18 @@ import { ManageCustomersPage } from './pages/manage-customers.js';
 import { ManageEmployeesPage } from './pages/manage-employees.js';
 import { ManageHotelsPage } from './pages/manage-hotels.js';
 import { ManageRoomsPage } from './pages/manage-rooms.js';
+import { Router } from './router.js';
 
 // Initialize services
 const authService = new AuthService();
-const apiService = new ApiService();
+const apiService = new ApiService(authService);
 
-// Initialize router with pages
-const router = new Router({
+// Initialize pages with dependencies
+const pages = {
     home: new HomePage(apiService),
     login: new LoginPage(authService, apiService),
     search: new SearchPage(apiService),
-    'room-details': new RoomDetailsPage(apiService),
+    'room-details': new RoomDetailsPage(apiService, authService),
     'customer-bookings': new CustomerBookingsPage(apiService),
     'customer-rentings': new CustomerRentingsPage(apiService),
     'employee-dashboard': new EmployeeDashboardPage(apiService),
@@ -36,22 +36,41 @@ const router = new Router({
     'manage-employees': new ManageEmployeesPage(apiService),
     'manage-hotels': new ManageHotelsPage(apiService),
     'manage-rooms': new ManageRoomsPage(apiService)
-}, authService);
+};
 
-// Check auth state on load
+// Initialize router
+const router = new Router(pages, authService);
+
+// Handle initial load and navigation
 document.addEventListener('DOMContentLoaded', () => {
     authService.checkAuthState().then(user => {
         router.updateNavigation(user);
-        router.navigate('home');
+
+        // Handle deep linking
+        const hash = window.location.hash.substring(1);
+        if (hash.startsWith('room-details/')) {
+            const roomId = hash.split('/')[1];
+            router.navigate('room-details', { roomId });
+        } else if (hash) {
+            router.navigate(hash);
+        } else {
+            router.navigate('home');
+        }
     });
 });
 
-// Handle navigation
+// Handle navigation clicks
 document.addEventListener('click', e => {
     if (e.target.matches('[data-page]')) {
         e.preventDefault();
         const page = e.target.getAttribute('data-page');
-        router.navigate(page);
+        const roomId = e.target.getAttribute('data-room-id');
+
+        if (page === 'room-details' && roomId) {
+            router.navigate(page, { roomId });
+        } else {
+            router.navigate(page);
+        }
     }
 });
 
