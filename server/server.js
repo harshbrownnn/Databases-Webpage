@@ -2,8 +2,7 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
 const path = require('path');
-const dotenv = require('dotenv');
-const mysql = require("mysql2")
+const mysql = require("mysql2");
 require('dotenv').config();
 
 const app = express();
@@ -14,46 +13,61 @@ app.use(bodyParser.urlencoded({ extended: true }));
 app.use(cors());
 app.use(express.json());
 
-// API Routes - MUST come before static files
+// API Routes
 const authRoutes = require('./routes/auth');
 const bookingRoutes = require('./routes/booking');
-const roomRoutes = require('./routes/rooms'); // Add this line
+const roomRoutes = require('./routes/rooms');
 
-// Verify routers
 console.log('Route types:', {
     auth: typeof authRoutes,
     booking: typeof bookingRoutes,
     rooms: typeof roomRoutes
 });
 
-// Mount API routes
 app.use('/api/auth', authRoutes);
 app.use('/api/bookings', bookingRoutes);
-app.use('/api/rooms', roomRoutes); // Add this line
+app.use('/api/rooms', roomRoutes);
 
-// Static files (AFTER API routes)
+// Static files
 app.use(express.static(path.join(__dirname, '../public')));
 
-// SPA catch-all (MUST be last)
+// SPA catch-all
 app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, '../public', 'index.html'));
 });
 
-// Connect to MySQL
+// Improved MySQL connection with error handling
 const db = mysql.createConnection({
-    host: process.env.DB_HOST,
-    user: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME
+    host: process.env.DB_HOST || 'localhost',
+    user: process.env.DB_USER || 'root',
+    password: process.env.DB_PASSWORD || '',
+    database: process.env.DB_NAME || 'hotel_db',
+    insecureAuth: true // Add this if using older MySQL auth
 });
 
-db.connect(err => {
-    if (err) {
-        console.error("Database connection failed: " + err.stack);
-        return ;
-    }
-    console.log("Connected to MySQL");
-})
+// Connect with retry logic
+function handleDisconnect() {
+    db.connect(err => {
+        if (err) {
+            console.error('Database connection failed:', err.message);
+            console.log('Retrying connection in 5 seconds...');
+            setTimeout(handleDisconnect, 5000);
+            return;
+        }
+        console.log('Successfully connected to MySQL database');
+    });
+
+    db.on('error', err => {
+        console.error('Database error:', err);
+        if (err.code === 'PROTOCOL_CONNECTION_LOST') {
+            handleDisconnect();
+        } else {
+            throw err;
+        }
+    });
+}
+
+handleDisconnect();
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
