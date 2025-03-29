@@ -2,6 +2,8 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
 const path = require('path');
+const dotenv = require('dotenv');
+const mysql = require("mysql2")
 require('dotenv').config();
 
 const app = express();
@@ -10,6 +12,7 @@ const app = express();
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(cors());
+app.use(express.json());
 
 // API Routes - MUST come before static files
 const authRoutes = require('./routes/auth');
@@ -35,6 +38,22 @@ app.use(express.static(path.join(__dirname, '../public')));
 app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, '../public', 'index.html'));
 });
+
+// Connect to MySQL
+const db = mysql.createConnection({
+    host: process.env.DB_HOST,
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    database: process.env.DB_NAME
+});
+
+db.connect(err => {
+    if (err) {
+        console.error("Database connection failed: " + err.stack);
+        return ;
+    }
+    console.log("Connected to MySQL");
+})
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
