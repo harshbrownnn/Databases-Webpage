@@ -1,60 +1,58 @@
+// routes/auth.js
 const express = require('express');
-const jwt = require('jsonwebtoken');
 const router = express.Router();
 const pool = require('../db');
-require('dotenv').config();
+const jwt = require('jsonwebtoken');
 
-// Customer login endpoint
-router.post('/customer/login', async (req, res) => {
-    const { id } = req.body;
-
-    try {
-        const [customer] = await pool.query('SELECT * FROM customer WHERE ID = ?', [id]);
-
-        if (!customer.length) {
-            return res.status(401).json({ error: 'Invalid customer ID' });
-        }
-
-        const token = jwt.sign(
-            { id: customer[0].ID, role: 'customer' },
-            process.env.JWT_SECRET,
-            { expiresIn: '1h' }
-        );
-
-        res.json({
-            token,
-            user: customer[0]
-        });
-    } catch (err) {
-        res.status(500).json({ error: 'Server error' });
+router.post('/login', async (req, res) => {
+  try {
+    console.log('Request body:', req.body); // Debug log
+    
+    if (!req.body || !req.body.ssn) {
+      return res.status(400).json({ error: 'SSN is required' });
     }
-});
 
-// Employee login endpoint
-router.post('/employee/login', async (req, res) => {
-    const { ssn } = req.body;
+    const cleanSSN = req.body.ssn.toString().replace(/-/g, '');
+    console.log('Cleaned SSN:', cleanSSN); // Debug log
 
-    try {
-        const [employee] = await pool.query('SELECT * FROM employee WHERE SSN = ?', [ssn]);
+    const [rows] = await pool.execute(
+      `SELECT SSN, FirstName, LastName, Role 
+       FROM employee 
+       WHERE SSN = ?`,
+      [cleanSSN]
+    );
 
-        if (!employee.length) {
-            return res.status(401).json({ error: 'Invalid employee SSN' });
-        }
-
-        const token = jwt.sign(
-            { id: employee[0].SSN, role: employee[0].Role },
-            process.env.JWT_SECRET,
-            { expiresIn: '1h' }
-        );
-
-        res.json({
-            token,
-            user: employee[0],
-            role: employee[0].Role
-        });
-    } catch (err) {
-        res.status(500).json({ error: 'Server error' });
+    if (rows.length === 0) {
+      return res.status(401).json({ error: 'Invalid SSN' });
     }
+
+    const employee = rows[0];
+    const token = jwt.sign(
+      {
+        ssn: employee.SSN,
+        name: `${employee.FirstName} ${employee.LastName}`,
+        role: employee.Role
+      },
+      process.env.JWT_SECRET || 'default-secret',
+      { expiresIn: '8h' }
+    );
+
+    res.json({
+      success: true,
+      token,
+      employee: {
+        name: `${employee.FirstName} ${employee.LastName}`,
+        role: employee.Role
+      }
+    });
+
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(500).json({ 
+      error: 'Login failed',
+      details: process.env.NODE_ENV === 'development' ? error.message : null
+    });
+  }
 });
 
 module.exports = router;
